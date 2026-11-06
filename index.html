@@ -1,0 +1,1847 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Almacén e Inventario - WMS Pro</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49',
+                        },
+                        darkbg: '#0f172a',
+                        cardbg: '#1e293b',
+                        bordercolor: '#334155'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for reports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0284c7;
+        }
+        .wall-pattern {
+            background-color: #1e1e2d;
+            background-image: repeating-linear-gradient(45deg, #2a2a3c 0, #2a2a3c 10px, #1e1e2d 10px, #1e1e2d 20px);
+        }
+        .aisle-pattern {
+            background-color: #0b1329;
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 8px 8px;
+        }
+        @media (max-width: 640px) {
+            .mobile-table {
+                min-width: 760px;
+            }
+            .report-chart {
+                height: 210px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-darkbg text-slate-100 min-h-screen font-sans flex flex-col antialiased">
+
+    <!-- Header / Navbar -->
+    <header class="bg-cardbg border-b border-bordercolor sticky top-0 z-30 shadow-md">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-16 py-2 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 p-2 rounded-lg text-white">
+                    <i class="fa-solid fa-boxes-stacked text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-wide text-white">LOGIX-WMS <span class="text-xs font-normal text-brand-500 border border-brand-500/30 px-2 py-0.5 rounded-full ml-1">v3.0</span></h1>
+                    <p class="text-xs text-slate-400">Control de Inventario</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 min-w-0">
+                <label for="warehouse-select" class="text-xs text-slate-400 whitespace-nowrap">Almacén</label>
+                <select id="warehouse-select" onchange="switchWarehouse(this.value)" class="min-w-0 max-w-full flex-1 xl:w-52 bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2">
+                    <option value="">Cargando...</option>
+                </select>
+                <button onclick="openWarehouseModal()" title="Crear almacén" aria-label="Crear almacén" class="shrink-0 bg-slate-800 hover:bg-slate-700 text-brand-400 p-2 rounded-lg border border-bordercolor transition">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+
+            <!-- Stats Bar Header -->
+            <div class="hidden lg:flex items-center space-x-4 text-sm">
+                <div class="flex items-center space-x-2">
+                    <span class="text-slate-400">Total Ítems:</span>
+                    <span id="stat-total-items" class="font-semibold text-brand-500">0</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-slate-400">Ocupación Estanterías:</span>
+                    <span id="stat-occupancy" class="font-semibold text-emerald-400">0%</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-slate-400">Stock Crítico:</span>
+                    <span id="stat-alerts" class="font-semibold text-amber-400">0</span>
+                </div>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="openProductModal()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition-all flex items-center shadow-lg shadow-brand-600/20">
+                    <i class="fa-solid fa-plus mr-1.5"></i> Añadir Producto
+                </button>
+                <button onclick="openConfigModal()" title="Configuración de Topología y Tamaño" class="bg-slate-800 hover:bg-slate-700 text-brand-400 p-2 rounded-lg border border-bordercolor transition">
+                    <i class="fa-solid fa-gears text-sm"></i>
+                </button>
+                <button onclick="exportDataJSON()" title="Exportar Copia de Seguridad" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-lg border border-bordercolor transition">
+                    <i class="fa-solid fa-download text-sm"></i>
+                </button>
+                <button onclick="resetDataConfirmation()" title="Restablecer Configuración Inicial" class="bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 p-2 rounded-lg border border-bordercolor transition">
+                    <i class="fa-solid fa-rotate-left text-sm"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-cardbg/50 border-b border-bordercolor px-4 sm:px-8">
+        <div class="max-w-7xl mx-auto flex space-x-1 sm:space-x-4 overflow-x-auto py-2">
+            <button onclick="switchTab('overview')" id="tab-btn-overview" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition flex items-center space-x-2 bg-brand-600/10 text-brand-500 border border-brand-500/30 whitespace-nowrap">
+                <i class="fa-solid fa-chart-column"></i> <span>Vista General</span>
+            </button>
+            <button onclick="switchTab('map')" id="tab-btn-map" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition flex items-center space-x-2 whitespace-nowrap">
+                <i class="fa-solid fa-map-location-dot"></i> <span>Mapa de Almacén</span>
+            </button>
+            <button onclick="switchTab('inventory')" id="tab-btn-inventory" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition flex items-center space-x-2">
+                <i class="fa-solid fa-list-check"></i> <span>Catálogo</span>
+            </button>
+            <button onclick="switchTab('reports')" id="tab-btn-reports" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition flex items-center space-x-2">
+                <i class="fa-solid fa-chart-pie"></i> <span>Informes</span>
+            </button>
+            <button onclick="switchTab('history')" id="tab-btn-history" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition flex items-center space-x-2">
+                <i class="fa-solid fa-clock-rotate-left"></i> <span>Movimientos</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8">
+
+        <section id="view-overview" class="tab-content space-y-5">
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                <div>
+                    <p class="text-xs uppercase tracking-wide text-brand-400">LOGIX-WMS</p>
+                    <h2 class="text-xl font-bold text-slate-100">Panorama de almacenes</h2>
+                    <p class="text-sm text-slate-400">Existencias y alertas consolidadas de todas las ubicaciones.</p>
+                </div>
+                <button onclick="openWarehouseModal()" class="self-start sm:self-auto bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2 rounded-lg"><i class="fa-solid fa-plus mr-1.5"></i>Nuevo almacén</button>
+            </div>
+            <div id="overview-stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+            <div id="warehouse-overview-list" class="divide-y divide-bordercolor border-y border-bordercolor"></div>
+        </section>
+
+        <!-- TAB 1: VISUAL MAP OF WAREHOUSE -->
+        <section id="view-map" class="tab-content hidden space-y-6">
+            <div class="bg-cardbg p-4 rounded-xl border border-bordercolor shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex flex-1 items-center space-x-2">
+                    <div class="relative flex-1 max-w-md">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="map-search-input" onkeyup="filterWarehouseMap()" placeholder="Buscar posición (ej. 02-C), producto o código..." class="w-full pl-9 pr-4 py-2 bg-darkbg border border-bordercolor rounded-lg text-sm text-slate-200 focus:outline-none focus:border-brand-500">
+                    </div>
+                    <button onclick="clearMapSearch()" class="px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-bordercolor transition">Limpiar</button>
+                </div>
+                
+                <!-- Legend -->
+                <div class="flex items-center flex-wrap gap-3 text-xs text-slate-300">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-slate-900 border border-slate-700 inline-block"></span>
+                        <span>Estantería Vacía</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-emerald-600/80 inline-block"></span>
+                        <span>Con Stock</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-amber-500/80 inline-block"></span>
+                        <span>Stock Bajo (≤ 10)</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3 h-3 rounded-sm wall-pattern border border-slate-600 inline-block"></span>
+                        <span>Pared / Muro</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3 h-3 rounded-sm aisle-pattern border border-slate-800 inline-block"></span>
+                        <span>Pasillo Libre</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Warehouse Interactive Matrix -->
+            <div class="bg-cardbg p-4 sm:p-6 rounded-xl border border-bordercolor shadow-md overflow-hidden">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-100">Mapa Topológico del Almacén</h2>
+                        <p class="text-xs text-slate-400">Las celdas libres permiten guardar inventario. Los pasillos y paredes se adaptan al espacio real.</p>
+                    </div>
+                    <button onclick="openConfigModal()" class="self-start sm:self-auto bg-slate-800 hover:bg-slate-700 text-brand-400 text-xs px-3 py-1.5 rounded-lg border border-bordercolor transition flex items-center">
+                        <i class="fa-solid fa-sliders mr-1.5"></i> Diseñar Layout Físico
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto border border-bordercolor rounded-lg bg-darkbg p-4">
+                    <div id="warehouse-grid-container" class="w-full flex justify-center">
+                        <!-- Dynamic Canvas/Grid -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: CATALOG / INVENTORY TABLE -->
+        <section id="view-inventory" class="tab-content hidden space-y-6">
+            <div class="bg-cardbg p-4 rounded-xl border border-bordercolor shadow-sm flex flex-col lg:flex-row items-center justify-between gap-4">
+                <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto flex-1">
+                    <div class="relative w-full sm:w-80">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="inv-search-input" onkeyup="renderInventoryTable()" placeholder="Buscar por código, nombre o estantería..." class="w-full pl-9 pr-4 py-2 bg-darkbg border border-bordercolor rounded-lg text-sm text-slate-200 focus:outline-none focus:border-brand-500">
+                    </div>
+                    
+                    <select id="inv-type-filter" onchange="renderInventoryTable()" class="w-full sm:w-auto bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500">
+                        <option value="">Todas las Categorías</option>
+                    </select>
+
+                    <select id="inv-stock-filter" onchange="renderInventoryTable()" class="w-full sm:w-auto bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500">
+                        <option value="all">Todos los Niveles de Stock</option>
+                        <option value="critical">Stock Crítico (≤ 10)</option>
+                        <option value="available">Con Stock (> 10)</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center space-x-2 w-full lg:w-auto justify-end">
+                    <button onclick="exportToCSV()" class="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium px-3 py-2 rounded-lg transition flex items-center shadow">
+                        <i class="fa-solid fa-file-excel mr-1.5"></i> Exportar a CSV
+                    </button>
+                    <button onclick="openProductModal()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition flex items-center shadow">
+                        <i class="fa-solid fa-plus mr-1.5"></i> Nuevo Producto
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inventory Table -->
+            <div class="bg-cardbg rounded-xl border border-bordercolor overflow-hidden shadow-md">
+                <div class="overflow-x-auto">
+                    <table class="mobile-table w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-bordercolor">
+                            <tr>
+                                <th class="px-4 py-3.5">Cód. Único</th>
+                                <th class="px-4 py-3.5">Categoría / Tipo</th>
+                                <th class="px-4 py-3.5">Abreviatura</th>
+                                <th class="px-4 py-3.5">Nombre del Producto</th>
+                                <th class="px-4 py-3.5">Ubicación</th>
+                                <th class="px-4 py-3.5 text-center">Cantidad</th>
+                                <th class="px-4 py-3.5 text-center">Estado</th>
+                                <th class="px-4 py-3.5 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-table-body" class="divide-y divide-bordercolor">
+                            <!-- JS populate -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: REPORTS -->
+        <section id="view-reports" class="tab-content hidden space-y-6">
+            <div class="bg-cardbg p-5 rounded-xl border border-bordercolor shadow-sm space-y-4">
+                <h3 class="text-md font-bold text-slate-100 flex items-center"><i class="fa-solid fa-sliders text-brand-500 mr-2"></i> Generador de Informes</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Tipo de Reporte</label>
+                        <select id="report-type-select" onchange="updateReportOptions()" class="w-full bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500">
+                            <option value="global">Informe General del Almacén</option>
+                            <option value="type">Informe por Tipo de Producto</option>
+                            <option value="row">Informe por Fila</option>
+                            <option value="single">Informe por Producto Específico</option>
+                        </select>
+                    </div>
+
+                    <div id="report-param-container" class="hidden">
+                        <label id="report-param-label" class="block text-xs font-medium text-slate-400 mb-1">Parámetro</label>
+                        <select id="report-param-select" class="w-full bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-brand-500">
+                            <!-- Dynamic -->
+                        </select>
+                    </div>
+
+                    <div class="flex items-end space-x-2">
+                        <button onclick="generateReport()" class="w-full bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition shadow">
+                            <i class="fa-solid fa-chart-line mr-1.5"></i> Generar Informe
+                        </button>
+                        <button onclick="printReport()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-lg border border-bordercolor transition" title="Imprimir Informe">
+                            <i class="fa-solid fa-print"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-bordercolor pt-4">
+                    <div>
+                        <label for="report-date-from" class="block text-xs font-medium text-slate-400 mb-1">Desde</label>
+                        <input type="date" id="report-date-from" class="w-full bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label for="report-date-to" class="block text-xs font-medium text-slate-400 mb-1">Hasta</label>
+                        <input type="date" id="report-date-to" class="w-full bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label for="report-period-select" class="block text-xs font-medium text-slate-400 mb-1">Agrupar movimientos por</label>
+                        <select id="report-period-select" class="w-full bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2">
+                            <option value="day">Día</option>
+                            <option value="week">Semana</option>
+                            <option value="month" selected>Mes</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <p class="text-xs text-slate-500">El periodo se aplica al historial de entradas, salidas y ajustes.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Report Output Area -->
+            <div id="report-output-area" class="bg-cardbg p-6 rounded-xl border border-bordercolor shadow-md space-y-6">
+                <!-- Dynamic Report Content -->
+            </div>
+        </section>
+
+        <!-- TAB 4: MOVEMENT HISTORY -->
+        <section id="view-history" class="tab-content hidden space-y-6">
+            <div class="bg-cardbg p-5 rounded-xl border border-bordercolor shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <div>
+
+                    <h3 class="text-md font-bold text-slate-100"><i class="fa-solid fa-clock-rotate-left text-brand-500 mr-2"></i> Registro de Movimientos</h3>
+                    <p class="text-xs text-slate-400">Auditoría completa de entradas, salidas y modificaciones de inventario.</p>
+                </div>
+                <button onclick="clearHistoryLog()" class="text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-800/40 px-3 py-1.5 rounded-lg transition">
+                    <i class="fa-solid fa-trash mr-1"></i> Limpiar Historial
+                </button>
+            </div>
+
+            <div class="bg-cardbg rounded-xl border border-bordercolor overflow-hidden shadow-md">
+                <div class="overflow-x-auto">
+                    <table class="mobile-table w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-900/80 text-xs uppercase text-slate-400 border-b border-bordercolor">
+                            <tr>
+                                <th class="px-4 py-3">Fecha y Hora</th>
+                                <th class="px-4 py-3">Tipo</th>
+                                <th class="px-4 py-3">Producto</th>
+                                <th class="px-4 py-3">Ubicación</th>
+                                <th class="px-4 py-3 text-center">Variación</th>
+                                <th class="px-4 py-3">Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="divide-y divide-bordercolor">
+                            <!-- JS Generated -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="warehouse-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-cardbg border border-bordercolor w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-bordercolor flex items-center justify-between">
+                <h3 class="font-bold text-slate-100"><i class="fa-solid fa-warehouse text-brand-500 mr-2"></i>Crear almacén</h3>
+                <button onclick="closeWarehouseModal()" class="text-slate-400 hover:text-white" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="createWarehouse(event)" class="p-5 space-y-4">
+                <div>
+                    <label for="warehouse-name" class="block text-xs font-medium text-slate-300 mb-1">Nombre</label>
+                    <input id="warehouse-name" required maxlength="60" placeholder="Ej. Depósito Valencia" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
+                </div>
+                <div>
+                    <label for="warehouse-location" class="block text-xs font-medium text-slate-300 mb-1">Ciudad o dirección (opcional)</label>
+                    <input id="warehouse-location" maxlength="100" placeholder="Ej. Valencia, Carabobo" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeWarehouseModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm rounded-lg"><i class="fa-solid fa-plus mr-1.5"></i>Crear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="report-preview-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-cardbg border border-bordercolor w-full max-w-6xl rounded-xl shadow-2xl max-h-[92vh] flex flex-col">
+            <div class="px-5 py-4 border-b border-bordercolor flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-100"><i class="fa-solid fa-file-arrow-down text-brand-500 mr-2"></i>Vista previa de exportación</h3>
+                    <p id="preview-subtitle" class="text-xs text-slate-400 mt-1"></p>
+                </div>
+                <button onclick="closeReportPreview()" class="text-slate-400 hover:text-white" aria-label="Cerrar vista previa"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-5 flex flex-col gap-4 min-h-0">
+                <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                    <div class="flex flex-wrap gap-3">
+                        <div>
+                            <label for="preview-format" class="block text-xs font-medium text-slate-400 mb-1">Formato de salida</label>
+                            <select id="preview-format" onchange="renderExportPreview()" class="bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2">
+                                <option value="excel">Excel (.xlsx)</option>
+                                <option value="pda">PDA / TDA (.csv)</option>
+                            </select>
+                        </div>
+                        <div id="preview-sheet-control">
+                            <label for="preview-sheet" class="block text-xs font-medium text-slate-400 mb-1">Hoja de Excel</label>
+                            <select id="preview-sheet" onchange="renderExportPreview()" class="bg-darkbg border border-bordercolor text-slate-200 text-sm rounded-lg px-3 py-2">
+                                <option value="movements">Movimientos</option>
+                                <option value="inventory">Inventario</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="downloadReportExport()" class="bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg"><i class="fa-solid fa-download mr-2"></i>Descargar informe</button>
+                </div>
+                <div id="export-preview-content" class="overflow-auto border border-bordercolor rounded-lg min-h-0"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Form: Add / Edit Product -->
+    <div id="product-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-cardbg border border-bordercolor w-full max-w-lg rounded-xl shadow-2xl overflow-hidden transform transition-all">
+            <div class="bg-slate-900/90 px-6 py-4 border-b border-bordercolor flex justify-between items-center">
+                <h3 id="modal-title" class="font-bold text-lg text-slate-100 flex items-center">
+                    <i class="fa-solid fa-box-archive text-brand-500 mr-2"></i> Anexar Producto
+                </h3>
+                <button onclick="closeProductModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="product-form" onsubmit="saveProduct(event)" class="p-6 space-y-4">
+                <input type="hidden" id="prod-id">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Tipo / Categoría (00-99)</label>
+                        <select id="prod-type-code" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500" required>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Abreviatura (3 Letras A-Z)</label>
+                        <input type="text" id="prod-name-code" maxlength="3" pattern="[A-Za-z]{3}" placeholder="Ej. HAR" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 uppercase focus:outline-none focus:border-brand-500" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nombre Completo del Producto</label>
+                    <input type="text" id="prod-name" placeholder="Ej. Harina Industrial de Trigo" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500" required>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Fila</label>
+                        <select id="prod-row" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500" required>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Estantería</label>
+                        <select id="prod-shelf" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500" required>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Cantidad Stock</label>
+                        <input type="number" id="prod-quantity" min="0" max="9999" placeholder="0" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500" required>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-bordercolor flex justify-end space-x-3">
+                    <button type="button" onclick="closeProductModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg transition">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition shadow-lg shadow-brand-600/30 flex items-center">
+                        <i class="fa-solid fa-floppy-disk mr-2"></i> Guardar Producto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal View Cell Detail -->
+    <div id="cell-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-cardbg border border-bordercolor w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
+            <div class="bg-slate-900/90 px-5 py-4 border-b border-bordercolor flex justify-between items-center">
+                <h3 id="cell-modal-title" class="font-bold text-slate-100 flex items-center">
+                    <i class="fa-solid fa-location-dot text-brand-500 mr-2"></i> Detalle de Ubicación
+                </h3>
+                <button onclick="closeCellModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div id="cell-modal-body" class="p-5 space-y-4 text-sm">
+                <!-- JS populated -->
+            </div>
+            <div class="px-5 py-3 bg-slate-900/50 border-t border-bordercolor flex justify-end">
+                <button onclick="closeCellModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Configuration & Layout Editor -->
+    <div id="config-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-cardbg border border-bordercolor w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="bg-slate-900/90 px-6 py-4 border-b border-bordercolor flex justify-between items-center flex-shrink-0">
+                <h3 class="font-bold text-lg text-slate-100 flex items-center">
+                    <i class="fa-solid fa-gears text-brand-500 mr-2"></i> Configuración de Disposición y Topología del Almacén
+                </h3>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-6 flex-grow">
+                <!-- Size & Dimension controls -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-darkbg p-4 rounded-xl border border-bordercolor">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Número Total de Filas (0 a 99)</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" id="config-rows-input" min="1" max="99" class="bg-cardbg border border-bordercolor text-slate-100 px-3 py-1.5 rounded-lg text-sm w-full focus:outline-none focus:border-brand-500">
+                            <button onclick="updateGridDimensions()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition whitespace-nowrap">Aplicar Filas</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Número Total de Estanterías/Columnas (1 a 26)</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" id="config-cols-input" min="1" max="26" class="bg-cardbg border border-bordercolor text-slate-100 px-3 py-1.5 rounded-lg text-sm w-full focus:outline-none focus:border-brand-500">
+                            <button onclick="updateGridDimensions()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition whitespace-nowrap">Aplicar Col.</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Layout Editor Instructions -->
+                <div class="space-y-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-200">Editor Interactivo de Estructura Física</h4>
+                            <p class="text-xs text-slate-400">Haz clic en cualquier posición para alternar su tipo en el plano real.</p>
+                        </div>
+                        <div class="flex items-center space-x-3 text-xs">
+                            <span class="flex items-center"><span class="w-3 h-3 rounded bg-slate-900 border border-slate-700 mr-1"></span> Estantería</span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded aisle-pattern border border-slate-700 mr-1"></span> Pasillo</span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded wall-pattern border border-slate-700 mr-1"></span> Pared</span>
+                        </div>
+                    </div>
+
+                    <div class="border border-bordercolor rounded-xl bg-darkbg p-4 overflow-x-auto max-h-[350px]">
+                        <div id="editor-grid-container" class="w-full flex justify-center">
+                            <!-- JS Layout Editor -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-900/60 border-t border-bordercolor flex justify-between items-center flex-shrink-0">
+                <button onclick="resetLayoutToDefault()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg border border-bordercolor transition">
+                    Restablecer 10x10 Completo
+                </button>
+                <div class="space-x-2">
+                    <button onclick="closeConfigModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition">Cancelar</button>
+                    <button onclick="saveLayoutConfiguration()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded-lg transition shadow-lg shadow-brand-600/30">
+                        <i class="fa-solid fa-floppy-disk mr-1.5"></i> Guardar Distribución
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast Box -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+    <!-- Application Script -->
+    <script>
+        // --- DATA DICTIONARIES & INITIAL STATE ---
+        const PRODUCT_TYPES = {
+            "01": "Materia Prima Seca",
+            "02": "Reactivos Químicos Inertes",
+            "03": "Componentes Electrónicos",
+            "04": "Fluidos y Lubricantes Hidráulicos",
+            "05": "Gases y Criogénicos",
+            "06": "Material de Empaque e Insumos",
+            "07": "Herramental e Instrumental Industrial",
+            "08": "Equipos de Protección Personal (EPP)",
+            "09": "Polímeros y Resinas Sintéticas",
+            "10": "Sujetadores y Tornillería de Alta Resistencia",
+            "11": "Filtros y Sistemas de Purificación",
+            "12": "Tuberías y Conexiones Acero Inox",
+            "13": "Módulos de Automatización y Sensores",
+            "14": "Refacciones de Motores e Impulsores",
+            "15": "Adhesivos y Sellantes Industriales"
+        };
+
+        // Default Config: 10 Rows (00-09) and 10 Columns (A-J)
+        const MAIN_WAREHOUSE_ID = 'wh-main';
+        let configRows = 10;
+        let configCols = 10;
+        let cellTopology = {}; // Format key "02-C" -> "shelf" | "aisle" | "wall"
+        let warehouses = [];
+        let activeWarehouseId = MAIN_WAREHOUSE_ID;
+
+        // Initial 30 Default Products adjusted to fit 10x10 range (Rows 00-09, Shelves A-J)
+        const INITIAL_PRODUCTS = [
+            { id: "101", typeCode: "01", nameCode: "HAR", name: "Harina Industrial de Trigo Grano Fino", row: "00", shelf: "A", quantity: 150 },
+            { id: "102", typeCode: "01", nameCode: "AZU", name: "Azúcar Refinada Grado Alimenticio", row: "00", shelf: "B", quantity: 80 },
+            { id: "103", typeCode: "02", nameCode: "SOD", name: "Carbonato de Sodio Técnico Puro", row: "00", shelf: "C", quantity: 45 },
+            { id: "104", typeCode: "02", nameCode: "SUL", name: "Sulfato de Magnesio Anhidro", row: "00", shelf: "D", quantity: 8 },
+            { id: "105", typeCode: "03", nameCode: "PLC", name: "Módulo Controlador Lógico Programable 24V", row: "01", shelf: "A", quantity: 25 },
+            { id: "106", typeCode: "03", nameCode: "MIC", name: "Microcontrolador Industrial 32-bit", row: "01", shelf: "B", quantity: 120 },
+            { id: "107", typeCode: "03", nameCode: "RES", name: "Resistencia SMD Lote 10k Ohm", row: "01", shelf: "C", quantity: 500 },
+            { id: "108", typeCode: "04", nameCode: "ACG", name: "Aceite Hidráulico ISO VG 46", row: "02", shelf: "A", quantity: 60 },
+            { id: "109", typeCode: "04", nameCode: "GRA", name: "Grasa de Litio Sintética Alta Temp", row: "02", shelf: "B", quantity: 5 },
+            { id: "110", typeCode: "05", nameCode: "NIT", name: "Cilindro Nitrógeno Líquido Grado 5.0", row: "03", shelf: "A", quantity: 12 },
+            { id: "111", typeCode: "05", nameCode: "ARG", name: "Gas Argón Alta Pureza Soldadura", row: "03", shelf: "B", quantity: 18 },
+            { id: "112", typeCode: "06", nameCode: "CAJ", name: "Caja Cartón Corrugado Doble 40x40", row: "03", shelf: "C", quantity: 300 },
+            { id: "113", typeCode: "06", nameCode: "PEL", name: "Película Plástica Emplaye Stretch", row: "04", shelf: "A", quantity: 40 },
+            { id: "114", typeCode: "07", nameCode: "TAL", name: "Taladro Neumático de Impacto 1/2", row: "04", shelf: "B", quantity: 9 },
+            { id: "115", typeCode: "07", nameCode: "CAL", name: "Calibrador Pie de Rey Digital Mtz", row: "04", shelf: "C", quantity: 14 },
+            { id: "116", typeCode: "08", nameCode: "CAS", name: "Casco de Seguridad Dieléctrico Clase E", row: "05", shelf: "A", quantity: 75 },
+            { id: "117", typeCode: "08", nameCode: "GUA", name: "Guantes Nitrilo Industrial Resistente", row: "05", shelf: "B", quantity: 200 },
+            { id: "118", typeCode: "09", nameCode: "PET", name: "Resina Polimérica PET Gránulos", row: "06", shelf: "A", quantity: 410 },
+            { id: "119", typeCode: "09", nameCode: "PVC", name: "Compuerto PVC Rígido Alta Densidad", row: "06", shelf: "B", quantity: 180 },
+            { id: "120", typeCode: "10", nameCode: "TOR", name: "Tornillo Hexagonal Grado 8 3/8x2", row: "07", shelf: "A", quantity: 1500 },
+            { id: "121", typeCode: "10", nameCode: "TUE", name: "Tuerca de Seguridad Autofrenante M10", row: "07", shelf: "B", quantity: 850 },
+            { id: "122", typeCode: "11", nameCode: "FLT", name: "Filtro Cartucho Separador Agua/Aceite", row: "07", shelf: "C", quantity: 22 },
+            { id: "123", typeCode: "12", nameCode: "TUB", name: "Tubo Acero Inoxidable 316L 2 Pulg", row: "08", shelf: "A", quantity: 35 },
+            { id: "124", typeCode: "12", nameCode: "VLV", name: "Válvula de Bola Acero Inox 1 Pulg", row: "08", shelf: "B", quantity: 6 },
+            { id: "125", typeCode: "13", nameCode: "SEN", name: "Sensor Proximidad Inductivo PNP", row: "08", shelf: "C", quantity: 42 },
+            { id: "126", typeCode: "13", nameCode: "FOT", name: "Fotocelda Laser Infrarrojo Rango 5m", row: "09", shelf: "A", quantity: 19 },
+            { id: "127", typeCode: "14", nameCode: "ROD", name: "Rodamiento Balero de Esferas 6205-2RS", row: "09", shelf: "B", quantity: 65 },
+            { id: "128", typeCode: "14", nameCode: "BOM", name: "Bomba Peristáltica Dosificadora 12V", row: "09", shelf: "C", quantity: 4 },
+            { id: "129", typeCode: "15", nameCode: "SIL", name: "Silicona Alta Temperatura Roja 300ml", row: "09", shelf: "D", quantity: 88 },
+            { id: "130", typeCode: "15", nameCode: "EPO", name: "Resina Epóxica Bicomponente Bote 1L", row: "09", shelf: "E", quantity: 31 }
+        ];
+
+        let products = [];
+        let historyLogs = [];
+        let reportChartInstance = null;
+        let movementChartInstance = null;
+        let currentReportData = { title: '', products: [], movements: [], from: '', to: '', period: 'month' };
+
+        // Initialize App
+        window.onload = function() {
+            loadStorageData();
+            populateWarehouseSelector();
+            populateFormDropdowns();
+            renderWarehouseGrid();
+            renderInventoryTable();
+            updateGlobalStats();
+            updateReportOptions();
+            renderWarehouseOverview();
+            switchTab('overview');
+        };
+
+        function loadStorageData() {
+            const storedProducts = localStorage.getItem('wms_products');
+            const storedLogs = localStorage.getItem('wms_history');
+            const storedConfig = localStorage.getItem('wms_config');
+            const storedTopo = localStorage.getItem('wms_topology');
+            const storedWarehouses = localStorage.getItem('wms_warehouses');
+
+            if (storedConfig) {
+                const conf = JSON.parse(storedConfig);
+                configRows = conf.rows;
+                configCols = conf.cols;
+            }
+
+            if (storedTopo) {
+                cellTopology = JSON.parse(storedTopo);
+            } else {
+                cellTopology = {}; // Default all active shelves
+            }
+
+            if (storedWarehouses) {
+                warehouses = JSON.parse(storedWarehouses);
+            } else {
+                warehouses = [{ id: MAIN_WAREHOUSE_ID, name: 'Almacén Principal', location: '', rows: configRows, cols: configCols, topology: cellTopology }];
+            }
+            if (!warehouses.length) {
+                warehouses = [{ id: MAIN_WAREHOUSE_ID, name: 'Almacén Principal', location: '', rows: 10, cols: 10, topology: {} }];
+            }
+            warehouses = warehouses.map(warehouse => ({
+                id: warehouse.id || MAIN_WAREHOUSE_ID,
+                name: warehouse.name || 'Almacén sin nombre',
+                location: warehouse.location || '',
+                rows: Number(warehouse.rows) || 10,
+                cols: Number(warehouse.cols) || 10,
+                topology: warehouse.topology || {}
+            }));
+            activeWarehouseId = localStorage.getItem('wms_active_warehouse') || warehouses[0].id;
+            if (!warehouses.some(warehouse => warehouse.id === activeWarehouseId)) activeWarehouseId = warehouses[0].id;
+            loadActiveWarehouseLayout();
+            saveWarehousesToStorage();
+
+            if (storedProducts) {
+                products = JSON.parse(storedProducts).map(product => ({ ...product, warehouseId: product.warehouseId || warehouses[0].id }));
+                saveProductsToStorage();
+            } else {
+                products = INITIAL_PRODUCTS.map(product => ({ ...product, warehouseId: warehouses[0].id }));
+                saveProductsToStorage();
+            }
+
+            if (storedLogs) {
+                historyLogs = JSON.parse(storedLogs);
+                historyLogs = historyLogs.map(log => {
+                    const matches = products.filter(product => product.name === log.product);
+                    const identifiedProduct = log.productId
+                        ? products.find(product => product.id === log.productId)
+                        : matches.length === 1 ? matches[0] : null;
+                    return {
+                        ...log,
+                        timestamp: normalizeTimestamp(log.timestamp),
+                        productId: log.productId || identifiedProduct?.id || '',
+                        productCode: log.productCode || (identifiedProduct ? getProductSku(identifiedProduct) : ''),
+                        warehouseId: log.warehouseId || identifiedProduct?.warehouseId || warehouses[0].id
+                    };
+                });
+                saveLogsToStorage();
+            } else {
+                historyLogs = createSampleHistory(warehouses[0].id);
+                saveLogsToStorage();
+            }
+        }
+
+        function getActiveWarehouse() {
+            return warehouses.find(warehouse => warehouse.id === activeWarehouseId) || warehouses[0];
+        }
+
+        function loadActiveWarehouseLayout() {
+            const warehouse = getActiveWarehouse();
+            configRows = warehouse.rows;
+            configCols = warehouse.cols;
+            cellTopology = { ...warehouse.topology };
+        }
+
+        function saveWarehousesToStorage() {
+            localStorage.setItem('wms_warehouses', JSON.stringify(warehouses));
+        }
+
+        function persistActiveWarehouseLayout() {
+            const warehouse = getActiveWarehouse();
+            if (!warehouse) return;
+            warehouse.rows = configRows;
+            warehouse.cols = configCols;
+            warehouse.topology = { ...cellTopology };
+            saveWarehousesToStorage();
+            localStorage.setItem('wms_config', JSON.stringify({ rows: configRows, cols: configCols }));
+            localStorage.setItem('wms_topology', JSON.stringify(cellTopology));
+        }
+
+        function getActiveProducts() {
+            return products.filter(product => product.warehouseId === activeWarehouseId);
+        }
+
+        function populateWarehouseSelector() {
+            const selector = document.getElementById('warehouse-select');
+            selector.innerHTML = warehouses.map(warehouse => `<option value="${warehouse.id}">${escapeHtml(warehouse.name)}</option>`).join('');
+            selector.value = activeWarehouseId;
+        }
+
+        function switchWarehouse(warehouseId) {
+            if (!warehouses.some(warehouse => warehouse.id === warehouseId) || warehouseId === activeWarehouseId) return;
+            persistActiveWarehouseLayout();
+            activeWarehouseId = warehouseId;
+            localStorage.setItem('wms_active_warehouse', activeWarehouseId);
+            loadActiveWarehouseLayout();
+            populateWarehouseSelector();
+            populateFormDropdowns();
+            renderWarehouseGrid();
+            renderInventoryTable();
+            updateGlobalStats();
+            updateReportOptions();
+            renderHistoryTable();
+            renderWarehouseOverview();
+            generateReport();
+        }
+
+        function openWarehouseModal() {
+            document.getElementById('warehouse-name').value = '';
+            document.getElementById('warehouse-location').value = '';
+            const modal = document.getElementById('warehouse-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('warehouse-name').focus();
+        }
+
+        function closeWarehouseModal() {
+            const modal = document.getElementById('warehouse-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function createWarehouse(event) {
+            event.preventDefault();
+            const name = document.getElementById('warehouse-name').value.trim();
+            const location = document.getElementById('warehouse-location').value.trim();
+            if (!name) return;
+            if (warehouses.some(warehouse => warehouse.name.toLowerCase() === name.toLowerCase())) {
+                showToast('Ya existe un almacén con ese nombre.', 'error');
+                return;
+            }
+            persistActiveWarehouseLayout();
+            const id = `wh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+            warehouses.push({ id, name, location, rows: 10, cols: 10, topology: {} });
+            saveWarehousesToStorage();
+            closeWarehouseModal();
+            activeWarehouseId = id;
+            localStorage.setItem('wms_active_warehouse', activeWarehouseId);
+            loadActiveWarehouseLayout();
+            populateWarehouseSelector();
+            populateFormDropdowns();
+            renderWarehouseGrid();
+            renderInventoryTable();
+            updateGlobalStats();
+            updateReportOptions();
+            renderHistoryTable();
+            renderWarehouseOverview();
+            generateReport();
+            showToast(`Almacén "${name}" creado.`, 'success');
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+        }
+
+        function normalizeTimestamp(value) {
+            const localized = String(value).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?/i);
+            if (localized) {
+                const [, first, secondPart, year, rawHour = '0', minute = '0', second = '0', meridiem] = localized;
+                const firstNumber = Number(first);
+                const secondNumber = Number(secondPart);
+                const isUSLocale = Boolean(meridiem) || navigator.language.toLowerCase().startsWith('en-us');
+                const month = firstNumber > 12 ? secondNumber : secondNumber > 12 ? firstNumber : isUSLocale ? firstNumber : secondNumber;
+                const day = firstNumber > 12 ? firstNumber : secondNumber > 12 ? secondNumber : isUSLocale ? secondNumber : firstNumber;
+                let hour = Number(rawHour);
+                if (meridiem?.toUpperCase() === 'PM' && hour < 12) hour += 12;
+                if (meridiem?.toUpperCase() === 'AM' && hour === 12) hour = 0;
+                const parsed = new Date(Number(year), month - 1, day, hour, Number(minute), Number(second));
+                if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+            }
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+        }
+
+        function createSampleHistory(warehouseId = MAIN_WAREHOUSE_ID) {
+            const samples = [];
+            const addPair = (product, daysAgo, amount, description) => {
+                const location = `${String(product.row).padStart(2, '0')}-${product.shelf}`;
+                const date = new Date();
+                date.setHours(10, 0, 0, 0);
+                date.setDate(date.getDate() - daysAgo);
+                samples.push({ timestamp: date.toISOString(), type: 'ENTRADA', product: product.name, productId: product.id, productCode: getProductSku(product), warehouseId, location, change: `+${amount}`, details: `${description} (ejemplo)`, stockBefore: product.quantity, stockAfter: product.quantity + amount });
+                date.setDate(date.getDate() + 2);
+                samples.push({ timestamp: date.toISOString(), type: 'SALIDA', product: product.name, productId: product.id, productCode: getProductSku(product), warehouseId, location, change: `-${amount}`, details: 'Consumo operativo (ejemplo)', stockBefore: product.quantity + amount, stockAfter: product.quantity });
+            };
+
+            const flour = INITIAL_PRODUCTS.find(product => product.id === '101');
+            const screws = INITIAL_PRODUCTS.find(product => product.id === '120');
+            const gloves = INITIAL_PRODUCTS.find(product => product.id === '117');
+            addPair(flour, 75, 24, 'Reposición mensual');
+            addPair(screws, 48, 36, 'Recepción de lote');
+            addPair(gloves, 20, 18, 'Reposición de seguridad');
+            samples.push({
+                timestamp: new Date(Date.now() - 90 * 86400000).toISOString(),
+                type: 'SISTEMA', product: 'Inicio del Sistema', location: 'N/A', change: '-',
+                warehouseId, details: 'Apertura de historial; movimientos fechados incluidos como ejemplo.'
+            });
+            return samples.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        }
+
+        function saveProductsToStorage() {
+            localStorage.setItem('wms_products', JSON.stringify(products));
+            updateGlobalStats();
+            renderWarehouseOverview();
+        }
+
+        function saveLogsToStorage() {
+            localStorage.setItem('wms_history', JSON.stringify(historyLogs));
+            renderWarehouseOverview();
+        }
+
+        function getProductSku(product) {
+            return `${product.typeCode}-${product.nameCode}`;
+        }
+
+        function logMovement(type, product, location, change, details, stockBefore = null, stockAfter = null) {
+            const quantityChange = Number.parseInt(change, 10);
+            historyLogs.unshift({
+                timestamp: new Date().toISOString(),
+                type, product: product.name, productId: product.id, warehouseId: product.warehouseId || activeWarehouseId,
+                productCode: getProductSku(product), location, change, details,
+                ...(Number.isFinite(quantityChange) ? {
+                    stockAfter: stockAfter ?? Number(product.quantity),
+                    stockBefore: stockBefore ?? Number(product.quantity) - quantityChange
+                } : {})
+            });
+            saveLogsToStorage();
+            renderHistoryTable();
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-600/10', 'text-brand-500', 'border', 'border-brand-500/30');
+                btn.classList.add('text-slate-400');
+            });
+
+            const activeContent = document.getElementById(`view-${tabId}`);
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+
+            if (activeContent && activeBtn) {
+                activeContent.classList.remove('hidden');
+                activeBtn.classList.add('bg-brand-600/10', 'text-brand-500', 'border', 'border-brand-500/30');
+                activeBtn.classList.remove('text-slate-400');
+            }
+
+            if (tabId === 'map') renderWarehouseGrid();
+            if (tabId === 'inventory') renderInventoryTable();
+            if (tabId === 'reports') generateReport();
+            if (tabId === 'history') renderHistoryTable();
+            if (tabId === 'overview') renderWarehouseOverview();
+        }
+
+        function populateFormDropdowns() {
+            const typeSelect = document.getElementById('prod-type-code');
+            const invTypeFilter = document.getElementById('inv-type-filter');
+            typeSelect.innerHTML = '';
+            invTypeFilter.innerHTML = '<option value="">Todas las Categorías</option>';
+
+            Object.entries(PRODUCT_TYPES).forEach(([code, label]) => {
+                typeSelect.appendChild(new Option(`${code} - ${label}`, code));
+                invTypeFilter.appendChild(new Option(`${code} - ${label}`, code));
+            });
+
+            const rowSelect = document.getElementById('prod-row');
+            rowSelect.innerHTML = '';
+            for (let r = 0; r < configRows; r++) {
+                const rowStr = String(r).padStart(2, '0');
+                rowSelect.appendChild(new Option(`Fila ${rowStr}`, rowStr));
+            }
+
+            const shelfSelect = document.getElementById('prod-shelf');
+            shelfSelect.innerHTML = '';
+            for (let c = 0; c < configCols; c++) {
+                const letter = String.fromCharCode(65 + c);
+                shelfSelect.appendChild(new Option(`Estantería ${letter}`, letter));
+            }
+        }
+
+        function updateGlobalStats() {
+            const activeProducts = getActiveProducts();
+            const totalItems = activeProducts.reduce((acc, p) => acc + Number(p.quantity), 0);
+            
+            // Calculate active shelves only
+            let activeShelvesCount = 0;
+            for (let r = 0; r < configRows; r++) {
+                for (let c = 0; c < configCols; c++) {
+                    const rowStr = String(r).padStart(2, '0');
+                    const letter = String.fromCharCode(65 + c);
+                    const type = cellTopology[`${rowStr}-${letter}`] || 'shelf';
+                    if (type === 'shelf') activeShelvesCount++;
+                }
+            }
+
+            const occupiedSlots = activeProducts.length;
+            const occupancyPercentage = activeShelvesCount > 0 ? ((occupiedSlots / activeShelvesCount) * 100).toFixed(1) : 0;
+            const criticalCount = activeProducts.filter(p => p.quantity <= 10).length;
+
+            document.getElementById('stat-total-items').textContent = totalItems.toLocaleString();
+            document.getElementById('stat-occupancy').textContent = `${occupancyPercentage}%`;
+            document.getElementById('stat-alerts').textContent = criticalCount;
+        }
+
+        function renderWarehouseOverview() {
+            const stats = document.getElementById('overview-stats');
+            const list = document.getElementById('warehouse-overview-list');
+            if (!stats || !list) return;
+            const totalUnits = products.reduce((sum, product) => sum + Number(product.quantity), 0);
+            const criticalCount = products.filter(product => Number(product.quantity) <= 10).length;
+            stats.innerHTML = `
+                <div class="bg-cardbg p-4 rounded-lg border border-bordercolor"><span class="text-xs text-slate-400">Almacenes</span><strong class="block text-2xl text-slate-100">${warehouses.length}</strong></div>
+                <div class="bg-cardbg p-4 rounded-lg border border-bordercolor"><span class="text-xs text-slate-400">Productos (SKU)</span><strong class="block text-2xl text-brand-400">${products.length}</strong></div>
+                <div class="bg-cardbg p-4 rounded-lg border border-bordercolor"><span class="text-xs text-slate-400">Unidades totales</span><strong class="block text-2xl text-emerald-400">${totalUnits.toLocaleString()}</strong></div>
+                <div class="bg-cardbg p-4 rounded-lg border border-bordercolor"><span class="text-xs text-slate-400">SKU críticos</span><strong class="block text-2xl text-amber-400">${criticalCount}</strong></div>`;
+            list.innerHTML = warehouses.map(warehouse => {
+                const warehouseProducts = products.filter(product => product.warehouseId === warehouse.id);
+                const units = warehouseProducts.reduce((sum, product) => sum + Number(product.quantity), 0);
+                const critical = warehouseProducts.filter(product => Number(product.quantity) <= 10).length;
+                const movements = historyLogs.filter(log => log.warehouseId === warehouse.id && log.type !== 'SISTEMA').length;
+                return `<article class="grid grid-cols-2 md:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_auto] items-center gap-x-3 gap-y-2 py-4">
+                    <div class="col-span-2 md:col-span-1 min-w-0"><h3 class="font-semibold text-slate-100 truncate">${escapeHtml(warehouse.name)}</h3><p class="text-xs text-slate-400 truncate">${escapeHtml(warehouse.location || 'Ubicación no especificada')}</p></div>
+                    <div><span class="block text-[11px] text-slate-500">SKU</span><strong>${warehouseProducts.length}</strong></div>
+                    <div><span class="block text-[11px] text-slate-500">Unidades</span><strong>${units.toLocaleString()}</strong></div>
+                    <div><span class="block text-[11px] text-slate-500">Críticos</span><strong class="${critical ? 'text-amber-400' : 'text-slate-300'}">${critical}</strong></div>
+                    <div><span class="block text-[11px] text-slate-500">Movimientos</span><strong>${movements}</strong></div>
+                    <button onclick="selectWarehouseAndOpen('${warehouse.id}')" class="col-span-2 md:col-span-1 justify-self-start md:justify-self-end px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 border border-bordercolor rounded-lg"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Abrir</button>
+                </article>`;
+            }).join('');
+        }
+
+        function selectWarehouseAndOpen(warehouseId) {
+            switchWarehouse(warehouseId);
+            switchTab('map');
+        }
+
+        // --- RENDER WAREHOUSE GRAPHICAL MATRIX ---
+        function renderWarehouseGrid() {
+            const container = document.getElementById('warehouse-grid-container');
+            const searchVal = document.getElementById('map-search-input').value.toLowerCase().trim();
+
+            const locationMap = {};
+            getActiveProducts().forEach(p => {
+                const formattedRow = String(p.row).padStart(2, '0');
+                locationMap[`${formattedRow}-${p.shelf}`] = p;
+            });
+
+            let html = `<div class="inline-block"><div class="grid gap-1 font-mono text-xs" style="grid-template-columns: 40px repeat(${configCols}, minmax(45px, 55px));">`;
+            
+            // Header Row (Shelf Letters A-Z)
+            html += `<div class="p-1 font-bold text-slate-500 text-center">Fila</div>`;
+            for (let c = 0; c < configCols; c++) {
+                const letter = String.fromCharCode(65 + c);
+                html += `<div class="p-1 font-bold text-brand-400 text-center">${letter}</div>`;
+            }
+
+            // Grid Rows
+            for (let r = 0; r < configRows; r++) {
+                const rowStr = String(r).padStart(2, '0');
+                html += `<div class="flex items-center justify-center font-bold text-slate-400">${rowStr}</div>`;
+
+                for (let c = 0; c < configCols; c++) {
+                    const shelfLetter = String.fromCharCode(65 + c);
+                    const locKey = `${rowStr}-${shelfLetter}`;
+                    const topoType = cellTopology[locKey] || 'shelf';
+                    const product = locationMap[locKey];
+
+                    if (topoType === 'wall') {
+                        html += `<div class="h-10 border border-slate-700/80 rounded wall-pattern cursor-not-allowed" title="Ubicación ${locKey}: Pared / Muro físico"></div>`;
+                    } else if (topoType === 'aisle') {
+                        html += `<div class="h-10 border border-slate-800/40 rounded aisle-pattern" title="Ubicación ${locKey}: Pasillo de circulación"></div>`;
+                    } else {
+                        // Shelf Active
+                        let cellStyle = "bg-slate-900 border-slate-800 text-slate-500 hover:bg-slate-800";
+                        let cellContent = "-";
+                        let searchHighlight = "";
+
+                        if (product) {
+                            const fullCode = `${product.typeCode}-${product.nameCode}`;
+                            cellContent = `<span class="font-bold text-[10px]">${fullCode}</span>`;
+
+                            if (product.quantity <= 10) {
+                                cellStyle = "bg-amber-950/70 border-amber-600/60 text-amber-300 hover:bg-amber-900/90";
+                            } else {
+                                cellStyle = "bg-emerald-950/70 border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/90";
+                            }
+
+                            if (searchVal !== "") {
+                                const matchLoc = locKey.toLowerCase().includes(searchVal);
+                                const matchCode = fullCode.toLowerCase().includes(searchVal);
+                                const matchName = product.name.toLowerCase().includes(searchVal);
+                                if (matchLoc || matchCode || matchName) {
+                                    searchHighlight = "ring-2 ring-brand-500 animate-pulse bg-brand-900/80 text-white";
+                                }
+                            }
+                        }
+
+                        html += `
+                            <button onclick="inspectCell('${rowStr}', '${shelfLetter}')" 
+                                    title="Estantería ${locKey} ${product ? '| ' + product.name + ' (' + product.quantity + ' ud)' : '| Libre'}" 
+                                    class="h-10 border rounded flex items-center justify-center transition font-mono select-none ${cellStyle} ${searchHighlight}">
+                                ${cellContent}
+                            </button>
+                        `;
+                    }
+                }
+            }
+
+            html += `</div></div>`;
+            container.innerHTML = html;
+        }
+
+        function filterWarehouseMap() { renderWarehouseGrid(); }
+        function clearMapSearch() {
+            document.getElementById('map-search-input').value = '';
+            renderWarehouseGrid();
+        }
+
+        function inspectCell(row, shelf) {
+            const formattedRow = String(row).padStart(2, '0');
+            const locKey = `${formattedRow}-${shelf}`;
+            const product = getActiveProducts().find(p => String(p.row).padStart(2, '0') === formattedRow && p.shelf === shelf);
+
+            const modalTitle = document.getElementById('cell-modal-title');
+            const modalBody = document.getElementById('cell-modal-body');
+
+            modalTitle.innerHTML = `<i class="fa-solid fa-location-dot text-brand-500 mr-2"></i> Posición: Fila ${formattedRow} - Estantería ${shelf}`;
+
+            if (product) {
+                const fullCode = `${product.typeCode}-${product.nameCode}`;
+                const typeName = PRODUCT_TYPES[product.typeCode] || "General";
+                const isLow = product.quantity <= 10;
+
+                modalBody.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="p-3 bg-darkbg rounded-lg border border-bordercolor flex justify-between items-center">
+                            <div>
+                                <span class="text-xs text-slate-400 block">Código del Producto</span>
+                                <span class="text-base font-mono font-bold text-brand-500">${fullCode}</span>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isLow ? 'bg-amber-900/50 text-amber-300 border border-amber-700' : 'bg-emerald-900/50 text-emerald-300 border border-emerald-700'}">
+                                ${isLow ? 'Stock Crítico' : 'Stock Normal'}
+                            </span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block">Nombre</span>
+                            <p class="font-medium text-slate-100">${product.name}</p>
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400 block">Categoría</span>
+                            <p class="text-slate-300">${typeName}</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 pt-2">
+                            <div class="bg-darkbg p-2.5 rounded-lg border border-bordercolor">
+                                <span class="text-xs text-slate-400 block">Stock Actual</span>
+                                <span class="text-lg font-bold text-slate-100">${product.quantity} ud</span>
+                            </div>
+                            <div class="bg-darkbg p-2.5 rounded-lg border border-bordercolor">
+                                <span class="text-xs text-slate-400 block">Ubicación</span>
+                                <span class="text-lg font-bold text-slate-100">${formattedRow}-${shelf}</span>
+                            </div>
+                        </div>
+                        <div class="pt-3 flex space-x-2">
+                            <button onclick="closeCellModal(); editProduct('${product.id}')" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium py-2 rounded-lg transition">
+                                Editar
+                            </button>
+                            <button onclick="closeCellModal(); quickAdjustStock('${product.id}', 10)" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-bordercolor transition">
+                                +10 Stock
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                modalBody.innerHTML = `
+                    <div class="text-center py-6 space-y-3">
+                        <div class="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-500">
+                            <i class="fa-solid fa-box-open text-xl"></i>
+                        </div>
+                        <p class="text-slate-300 font-medium">Estantería Libre</p>
+                        <p class="text-xs text-slate-400">Sin productos asignados en Fila ${formattedRow} - Estantería ${shelf}.</p>
+                        <button onclick="closeCellModal(); openProductModalForLocation('${formattedRow}', '${shelf}')" class="mt-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-4 py-2 rounded-lg transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Asignar Producto
+                        </button>
+                    </div>
+                `;
+            }
+
+            document.getElementById('cell-modal').classList.remove('hidden');
+        }
+
+        function closeCellModal() { document.getElementById('cell-modal').classList.add('hidden'); }
+
+        // --- CATALOG & INVENTORY TABLE ---
+        function renderInventoryTable() {
+            const tbody = document.getElementById('inventory-table-body');
+            const searchVal = document.getElementById('inv-search-input').value.toLowerCase().trim();
+            const typeFilter = document.getElementById('inv-type-filter').value;
+            const stockFilter = document.getElementById('inv-stock-filter').value;
+
+            const filtered = getActiveProducts().filter(p => {
+                const fullCode = `${p.typeCode}-${p.nameCode}`.toLowerCase();
+                const formattedRow = String(p.row).padStart(2, '0');
+                const locationStr = `${formattedRow}-${p.shelf}`.toLowerCase();
+
+                const matchesSearch = searchVal === "" ||
+                    fullCode.includes(searchVal) ||
+                    p.name.toLowerCase().includes(searchVal) ||
+                    locationStr.includes(searchVal);
+
+                const matchesType = typeFilter === "" || p.typeCode === typeFilter;
+
+                let matchesStock = true;
+                if (stockFilter === "critical") matchesStock = p.quantity <= 10;
+                if (stockFilter === "available") matchesStock = p.quantity > 10;
+
+                return matchesSearch && matchesType && matchesStock;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-slate-500">No se encontraron productos.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(p => {
+                const formattedRow = String(p.row).padStart(2, '0');
+                const fullCode = `${p.typeCode}-${p.nameCode}`;
+                const typeLabel = PRODUCT_TYPES[p.typeCode] || "General";
+                const isCritical = p.quantity <= 10;
+
+                return `
+                    <tr class="hover:bg-slate-800/50 transition border-b border-bordercolor/50">
+                        <td class="px-4 py-3 font-mono font-bold text-brand-500">${fullCode}</td>
+                        <td class="px-4 py-3 text-xs text-slate-300">${p.typeCode} - ${typeLabel}</td>
+                        <td class="px-4 py-3 font-mono text-slate-300">${p.nameCode}</td>
+                        <td class="px-4 py-3 font-medium text-slate-100">${p.name}</td>
+                        <td class="px-4 py-3 font-mono text-xs">${formattedRow}-${p.shelf}</td>
+                        <td class="px-4 py-3 text-center font-bold font-mono text-slate-100">${p.quantity}</td>
+                        <td class="px-4 py-3 text-center">
+                            ${isCritical 
+                                ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-900/40 text-amber-300 border border-amber-700/50">Crítico</span>`
+                                : `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">Normal</span>`}
+                        </td>
+                        <td class="px-4 py-3 text-right space-x-1">
+                            <button onclick="editProduct('${p.id}')" class="p-1 text-slate-400 hover:text-brand-500"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button onclick="deleteProduct('${p.id}')" class="p-1 text-slate-400 hover:text-red-400"><i class="fa-solid fa-trash-can"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- ADD/EDIT PRODUCT MODAL ---
+        function openProductModal() {
+            document.getElementById('modal-title').innerHTML = `<i class="fa-solid fa-box-archive text-brand-500 mr-2"></i> Anexar Producto`;
+            document.getElementById('product-form').reset();
+            document.getElementById('prod-id').value = '';
+            document.getElementById('product-modal').classList.remove('hidden');
+        }
+
+        function openProductModalForLocation(row, shelf) {
+            openProductModal();
+            document.getElementById('prod-row').value = String(parseInt(row, 10)).padStart(2, '0');
+            document.getElementById('prod-shelf').value = shelf;
+        }
+
+        function closeProductModal() { document.getElementById('product-modal').classList.add('hidden'); }
+
+        function editProduct(id) {
+            const p = products.find(prod => prod.id === id);
+            if (!p) return;
+            if (p.warehouseId !== activeWarehouseId) switchWarehouse(p.warehouseId);
+
+            document.getElementById('modal-title').innerHTML = `<i class="fa-solid fa-pen-to-square text-brand-500 mr-2"></i> Editar Producto`;
+            document.getElementById('prod-id').value = p.id;
+            document.getElementById('prod-type-code').value = p.typeCode;
+            document.getElementById('prod-name-code').value = p.nameCode;
+            document.getElementById('prod-name').value = p.name;
+            document.getElementById('prod-row').value = String(p.row).padStart(2, '0');
+            document.getElementById('prod-shelf').value = p.shelf;
+            document.getElementById('prod-quantity').value = p.quantity;
+
+            document.getElementById('product-modal').classList.remove('hidden');
+        }
+
+        function saveProduct(event) {
+            event.preventDefault();
+
+            const id = document.getElementById('prod-id').value;
+            const typeCode = document.getElementById('prod-type-code').value;
+            const nameCode = document.getElementById('prod-name-code').value.toUpperCase().trim();
+            const name = document.getElementById('prod-name').value.trim();
+            const rowStr = document.getElementById('prod-row').value;
+            const shelf = document.getElementById('prod-shelf').value;
+            const quantity = parseInt(document.getElementById('prod-quantity').value, 10);
+
+            // Validate non-shelf topology
+            const locKey = `${rowStr}-${shelf}`;
+            if (cellTopology[locKey] === 'wall' || cellTopology[locKey] === 'aisle') {
+                showToast(`No se puede guardar en ${locKey} porque está configurada como ${cellTopology[locKey] === 'wall' ? 'Pared' : 'Pasillo'}.`, 'error');
+                return;
+            }
+
+            // Validate collision
+            const existingLoc = getActiveProducts().find(p => String(p.row).padStart(2, '0') === rowStr && p.shelf === shelf && p.id !== id);
+            if (existingLoc) {
+                showToast(`La estantería ${rowStr}-${shelf} ya está ocupada por "${existingLoc.name}".`, 'error');
+                return;
+            }
+
+            if (id) {
+                const index = products.findIndex(p => p.id === id);
+                if (index !== -1) {
+                    const previousProduct = products[index];
+                    const diff = quantity - products[index].quantity;
+                    products[index] = { ...products[index], id, typeCode, nameCode, name, row: rowStr, shelf, quantity, warehouseId: activeWarehouseId };
+                    const updatedProduct = products[index];
+                    if (diff !== 0) {
+                        logMovement(diff > 0 ? 'ENTRADA' : 'SALIDA', updatedProduct, `${rowStr}-${shelf}`, diff > 0 ? `+${diff}` : `${diff}`, 'Ajuste de cantidad al editar producto.');
+                    } else if (previousProduct.typeCode !== typeCode || previousProduct.nameCode !== nameCode || previousProduct.row !== rowStr || previousProduct.shelf !== shelf || previousProduct.name !== name) {
+                        logMovement('EDICIÓN', updatedProduct, `${rowStr}-${shelf}`, '0', `Datos modificados; ubicación anterior ${String(previousProduct.row).padStart(2, '0')}-${previousProduct.shelf}.`);
+                    }
+                    showToast('Producto actualizado.', 'success');
+                }
+            } else {
+                const newId = Date.now().toString();
+                const newProduct = { id: newId, typeCode, nameCode, name, row: rowStr, shelf, quantity, warehouseId: activeWarehouseId };
+                products.push(newProduct);
+                logMovement('ENTRADA', newProduct, `${rowStr}-${shelf}`, `+${quantity}`, 'Anexión de nuevo producto.');
+                showToast('Producto añadido.', 'success');
+            }
+
+            saveProductsToStorage();
+            closeProductModal();
+            renderWarehouseGrid();
+            renderInventoryTable();
+            updateReportOptions();
+        }
+
+        function deleteProduct(id) {
+            const p = getActiveProducts().find(prod => prod.id === id);
+            if (!p) return;
+            if (confirm(`¿Eliminar producto "${p.name}"?`)) {
+                const removedQuantity = Number(p.quantity);
+                products = products.filter(prod => prod.id !== id);
+                saveProductsToStorage();
+                logMovement('BAJA', p, `${p.row}-${p.shelf}`, `-${p.quantity}`, 'Producto eliminado.', removedQuantity, 0);
+                showToast('Producto eliminado.', 'info');
+                renderWarehouseGrid();
+                renderInventoryTable();
+            }
+        }
+
+        function quickAdjustStock(id, amount) {
+            const p = getActiveProducts().find(prod => prod.id === id);
+            if (!p) return;
+            p.quantity += amount;
+            saveProductsToStorage();
+            logMovement('AJUSTE', p, `${p.row}-${p.shelf}`, amount >= 0 ? `+${amount}` : `${amount}`, 'Ajuste rápido.');
+            showToast(`+${amount} unidades a ${p.name}`, 'success');
+            renderWarehouseGrid();
+            renderInventoryTable();
+        }
+
+        // --- CONFIGURATION & TOPOLOGY EDITOR MODAL ---
+        let tempTopology = {};
+
+        function openConfigModal() {
+            document.getElementById('config-rows-input').value = configRows;
+            document.getElementById('config-cols-input').value = configCols;
+            tempTopology = JSON.parse(JSON.stringify(cellTopology));
+            renderEditorGrid();
+            document.getElementById('config-modal').classList.remove('hidden');
+        }
+
+        function closeConfigModal() {
+            document.getElementById('config-modal').classList.add('hidden');
+        }
+
+        function updateGridDimensions() {
+            const newRows = parseInt(document.getElementById('config-rows-input').value, 10);
+            const newCols = parseInt(document.getElementById('config-cols-input').value, 10);
+
+            if (newRows >= 1 && newRows <= 99) configRows = newRows;
+            if (newCols >= 1 && newCols <= 26) configCols = newCols;
+
+            populateFormDropdowns();
+            renderEditorGrid();
+        }
+
+        function renderEditorGrid() {
+            const container = document.getElementById('editor-grid-container');
+            let html = `<div class="inline-block"><div class="grid gap-1 font-mono text-xs" style="grid-template-columns: 35px repeat(${configCols}, minmax(35px, 45px));">`;
+
+            html += `<div class="p-1 text-center font-bold text-slate-500">Fila</div>`;
+            for (let c = 0; c < configCols; c++) {
+                const letter = String.fromCharCode(65 + c);
+                html += `<div class="p-1 font-bold text-brand-400 text-center">${letter}</div>`;
+            }
+
+            for (let r = 0; r < configRows; r++) {
+                const rowStr = String(r).padStart(2, '0');
+                html += `<div class="flex items-center justify-center font-bold text-slate-400">${rowStr}</div>`;
+
+                for (let c = 0; c < configCols; c++) {
+                    const shelfLetter = String.fromCharCode(65 + c);
+                    const locKey = `${rowStr}-${shelfLetter}`;
+                    const type = tempTopology[locKey] || 'shelf';
+
+                    let styleClass = "bg-slate-900 border-slate-700 text-slate-400";
+                    let label = "E";
+                    if (type === 'wall') { styleClass = "wall-pattern border-slate-600 text-transparent"; label = "W"; }
+                    if (type === 'aisle') { styleClass = "aisle-pattern border-slate-800 text-transparent"; label = "P"; }
+
+                    html += `
+                        <button onclick="toggleCellType('${locKey}')" 
+                                title="Cambiar estado de ${locKey} (Actual: ${type})" 
+                                class="h-8 border rounded flex items-center justify-center font-mono text-[10px] font-bold ${styleClass} transition active:scale-95">
+                            ${type === 'shelf' ? 'EST' : ''}
+                        </button>
+                    `;
+                }
+            }
+
+            html += `</div></div>`;
+            container.innerHTML = html;
+        }
+
+        function toggleCellType(locKey) {
+            const current = tempTopology[locKey] || 'shelf';
+            if (current === 'shelf') tempTopology[locKey] = 'aisle';
+            else if (current === 'aisle') tempTopology[locKey] = 'wall';
+            else tempTopology[locKey] = 'shelf';
+
+            renderEditorGrid();
+        }
+
+        function resetLayoutToDefault() {
+            configRows = 10;
+            configCols = 10;
+            tempTopology = {};
+            document.getElementById('config-rows-input').value = 10;
+            document.getElementById('config-cols-input').value = 10;
+            populateFormDropdowns();
+            renderEditorGrid();
+        }
+
+        function saveLayoutConfiguration() {
+            cellTopology = JSON.parse(JSON.stringify(tempTopology));
+            persistActiveWarehouseLayout();
+
+            populateFormDropdowns();
+            renderWarehouseGrid();
+            updateGlobalStats();
+            closeConfigModal();
+            showToast('Topología y dimensiones del almacén guardadas.', 'success');
+        }
+
+        // --- REPORTS & HISTORICAL AUDIT ---
+        function updateReportOptions() {
+            const reportType = document.getElementById('report-type-select').value;
+            const paramContainer = document.getElementById('report-param-container');
+            const paramLabel = document.getElementById('report-param-label');
+            const paramSelect = document.getElementById('report-param-select');
+
+            paramSelect.innerHTML = '';
+
+            if (reportType === 'global') {
+                paramContainer.classList.add('hidden');
+            } else if (reportType === 'type') {
+                paramContainer.classList.remove('hidden');
+                paramLabel.textContent = 'Seleccione Tipo';
+                Object.entries(PRODUCT_TYPES).forEach(([code, label]) => {
+                    paramSelect.appendChild(new Option(`${code} - ${label}`, code));
+                });
+            } else if (reportType === 'row') {
+                paramContainer.classList.remove('hidden');
+                paramLabel.textContent = 'Seleccione Fila';
+                for (let r = 0; r < configRows; r++) {
+                    const rowStr = String(r).padStart(2, '0');
+                    paramSelect.appendChild(new Option(`Fila ${rowStr}`, rowStr));
+                }
+            } else if (reportType === 'single') {
+                paramContainer.classList.remove('hidden');
+                paramLabel.textContent = 'Seleccione Producto';
+                getActiveProducts().forEach(p => {
+                    paramSelect.appendChild(new Option(`[${p.typeCode}-${p.nameCode}] ${p.name}`, p.id));
+                });
+            }
+        }
+
+        function generateReport() {
+            const reportType = document.getElementById('report-type-select').value;
+            const paramVal = document.getElementById('report-param-select').value;
+            const output = document.getElementById('report-output-area');
+            const from = document.getElementById('report-date-from').value;
+            const to = document.getElementById('report-date-to').value;
+            const period = document.getElementById('report-period-select').value;
+
+            if (from && to && from > to) {
+                showToast('La fecha inicial no puede ser posterior a la fecha final.', 'error');
+                return;
+            }
+
+            let title = "", description = "", filteredProducts = [];
+            const activeProducts = getActiveProducts();
+
+            if (reportType === 'global') {
+                title = `Informe General: ${getActiveWarehouse().name}`;
+                description = "Vista consolidada de existencias y estanterías.";
+                filteredProducts = activeProducts;
+            } else if (reportType === 'type') {
+                title = `Informe por Categoría: ${paramVal} - ${PRODUCT_TYPES[paramVal] || ''}`;
+                description = `Detalle de existencia para la categoría ${paramVal}.`;
+                filteredProducts = activeProducts.filter(p => p.typeCode === paramVal);
+            } else if (reportType === 'row') {
+                title = `Informe de Fila ${paramVal}`;
+                description = `Productos alojados en la fila ${paramVal}.`;
+                filteredProducts = activeProducts.filter(p => String(p.row).padStart(2, '0') === paramVal);
+            } else if (reportType === 'single') {
+                const p = activeProducts.find(prod => prod.id === paramVal);
+                if (p) {
+                    title = `Informe de Producto: ${p.name}`;
+                    description = `Detalle técnico de inventario para el código ${p.typeCode}-${p.nameCode}.`;
+                    filteredProducts = [p];
+                }
+            }
+
+            const totalUnits = filteredProducts.reduce((acc, p) => acc + Number(p.quantity), 0);
+            const criticalUnits = filteredProducts.filter(p => p.quantity <= 10).length;
+            const fromDate = from ? new Date(`${from}T00:00:00`) : null;
+            const toDate = to ? new Date(`${to}T23:59:59.999`) : null;
+            const movements = historyLogs.filter(log => {
+                const timestamp = new Date(log.timestamp);
+                const inRange = (!fromDate || timestamp >= fromDate) && (!toDate || timestamp <= toDate);
+                const belongsToSelection = reportType === 'global' || movementBelongsToProducts(log, filteredProducts);
+                return inRange && log.warehouseId === activeWarehouseId && log.type !== 'SISTEMA' && belongsToSelection;
+            }).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            const groupedMovements = groupMovementsByPeriod(movements, period);
+            currentReportData = { title, products: filteredProducts, movements, from, to, period, groupedMovements };
+            const rangeLabel = from || to ? `${from || 'Inicio'} a ${to || 'Hoy'}` : 'Todo el historial';
+
+            let reportHTML = `
+                <div class="border-b border-bordercolor pb-4 flex justify-between items-start">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-100">${title}</h2>
+                        <p class="text-xs text-slate-400 mt-1">${escapeHtml(getActiveWarehouse().name)} · ${description}</p>
+                    </div>
+                    <span class="text-xs bg-slate-800 text-slate-400 px-3 py-1 rounded-full border border-bordercolor">
+                        ${new Date().toLocaleDateString()}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-darkbg p-4 rounded-xl border border-bordercolor">
+                        <span class="text-xs text-slate-400 block">Total Ítems Distinctos</span>
+                        <span class="text-2xl font-bold text-brand-500">${filteredProducts.length} SKU</span>
+                    </div>
+                    <div class="bg-darkbg p-4 rounded-xl border border-bordercolor">
+                        <span class="text-xs text-slate-400 block">Volumen Total</span>
+                        <span class="text-2xl font-bold text-emerald-400">${totalUnits.toLocaleString()} ud</span>
+                    </div>
+                    <div class="bg-darkbg p-4 rounded-xl border border-bordercolor">
+                        <span class="text-xs text-slate-400 block">Stock Crítico</span>
+                        <span class="text-2xl font-bold ${criticalUnits > 0 ? 'text-amber-400' : 'text-slate-200'}">${criticalUnits}</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-100">Movimiento de inventario</h3>
+                        <p class="text-xs text-slate-400">Periodo: ${rangeLabel} · ${movements.length} movimientos</p>
+                    </div>
+                    <button onclick="openReportPreview()" class="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium px-3 py-2 rounded-lg"><i class="fa-solid fa-file-export mr-1.5"></i>Vista previa y exportar</button>
+                </div>
+
+                <div class="bg-darkbg p-4 rounded-xl border border-bordercolor">
+                    <div class="h-56 relative"><canvas id="movementChart"></canvas></div>
+                </div>
+
+                <div class="overflow-x-auto border border-bordercolor rounded-lg">
+                    <table class="mobile-table w-full text-left text-xs text-slate-300">
+                        <thead class="bg-slate-900/80 uppercase text-slate-400"><tr><th class="px-3 py-2">Fecha</th><th class="px-3 py-2">Tipo</th><th class="px-3 py-2">Producto</th><th class="px-3 py-2">Ubicación</th><th class="px-3 py-2 text-right">Cambio</th><th class="px-3 py-2 text-right">Saldo</th></tr></thead>
+                        <tbody>${movements.length ? movements.slice().reverse().map(log => `<tr class="border-t border-bordercolor"><td class="px-3 py-2">${formatTimestamp(log.timestamp)}</td><td class="px-3 py-2">${log.type}</td><td class="px-3 py-2">${log.product}</td><td class="px-3 py-2 font-mono">${log.location}</td><td class="px-3 py-2 text-right font-mono">${log.change}</td><td class="px-3 py-2 text-right font-mono">${log.stockBefore ?? '-'} → ${log.stockAfter ?? '-'}</td></tr>`).join('') : '<tr><td colspan="6" class="px-3 py-6 text-center text-slate-500">Sin movimientos para el periodo seleccionado.</td></tr>'}</tbody>
+                    </table>
+                </div>
+
+                <div class="bg-darkbg p-4 rounded-xl border border-bordercolor">
+                    <div class="h-60 relative">
+                        <canvas id="reportChart"></canvas>
+                    </div>
+                </div>
+            `;
+
+            output.innerHTML = reportHTML;
+            setTimeout(() => {
+                renderReportChart(filteredProducts);
+                renderMovementChart(groupedMovements);
+            }, 50);
+        }
+
+        function movementBelongsToProducts(log, selectedProducts) {
+            if (log.productId) return selectedProducts.some(product => product.id === log.productId);
+            const matchingProducts = products.filter(product => product.name === log.product);
+            return matchingProducts.length === 1 && selectedProducts.some(product => product.id === matchingProducts[0].id);
+        }
+
+        function groupMovementsByPeriod(movements, period) {
+            const groups = {};
+            movements.forEach(log => {
+                const date = new Date(log.timestamp);
+                let key;
+                if (period === 'day') key = date.toISOString().slice(0, 10);
+                else if (period === 'week') {
+                    const monday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+                    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+                    key = `Semana ${monday.toISOString().slice(0, 10)}`;
+                } else key = date.toISOString().slice(0, 7);
+
+                if (!groups[key]) groups[key] = { label: key, entries: 0, exits: 0, adjustments: 0, count: 0 };
+                const amount = Number.parseInt(log.change, 10) || 0;
+                groups[key].count++;
+                if (amount > 0) groups[key].entries += amount;
+                if (amount < 0) groups[key].exits += Math.abs(amount);
+                if (log.type === 'AJUSTE') groups[key].adjustments += amount;
+            });
+            return Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
+        }
+
+        function renderMovementChart(groups) {
+            const canvas = document.getElementById('movementChart');
+            if (!canvas) return;
+            if (movementChartInstance) movementChartInstance.destroy();
+            movementChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: groups.map(group => group.label),
+                    datasets: [
+                        { label: 'Entradas (unidades)', data: groups.map(group => group.entries), backgroundColor: 'rgba(16, 185, 129, 0.75)' },
+                        { label: 'Salidas (unidades)', data: groups.map(group => group.exits), backgroundColor: 'rgba(244, 63, 94, 0.75)' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }, y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } } }, plugins: { legend: { labels: { color: '#cbd5e1' } } } }
+            });
+        }
+
+        function formatTimestamp(timestamp) {
+            return new Intl.DateTimeFormat('es', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp));
+        }
+
+        function openReportPreview() {
+            document.getElementById('preview-format').value = 'excel';
+            document.getElementById('preview-subtitle').textContent = `${currentReportData.title} · ${currentReportData.movements.length} movimientos · ${currentReportData.from || 'Inicio'} a ${currentReportData.to || 'Hoy'}`;
+            renderExportPreview();
+            const modal = document.getElementById('report-preview-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeReportPreview() {
+            const modal = document.getElementById('report-preview-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function getExportRows() {
+            const { products: reportProducts, movements } = currentReportData;
+            return {
+                inventory: reportProducts.map(product => ({
+                    Codigo: `${product.typeCode}-${product.nameCode}`,
+                    Producto: product.name,
+                    Categoria: PRODUCT_TYPES[product.typeCode] || '',
+                    Ubicacion: `${String(product.row).padStart(2, '0')}-${product.shelf}`,
+                    Stock: Number(product.quantity)
+                })),
+                movements: movements.map(log => ({
+                    Fecha: formatTimestamp(log.timestamp), Tipo: log.type, SKU: log.productCode || '', Producto: log.product,
+                    Ubicacion: log.location, Cambio: log.change,
+                    Saldo_anterior: log.stockBefore ?? '', Saldo_nuevo: log.stockAfter ?? '', Detalle: log.details
+                }))
+            };
+        }
+
+        function renderExportPreview() {
+            const target = document.getElementById('export-preview-content');
+            const format = document.getElementById('preview-format').value;
+            const isPda = format === 'pda';
+            const sheetControl = document.getElementById('preview-sheet-control');
+            const selectedSheet = document.getElementById('preview-sheet').value;
+            sheetControl.classList.toggle('hidden', isPda);
+            const rows = getExportRows();
+            const previewRows = isPda
+                ? rows.movements.map(row => ({ Fecha: row.Fecha, SKU: row.SKU, Ubicacion: row.Ubicacion, Tipo: row.Tipo, Cambio: row.Cambio, Stock: row.Saldo_nuevo }))
+                : rows[selectedSheet];
+            const columns = previewRows.length ? Object.keys(previewRows[0]) : isPda
+                ? ['Fecha', 'SKU', 'Ubicacion', 'Tipo', 'Cambio', 'Stock']
+                : selectedSheet === 'inventory' ? ['Codigo', 'Producto', 'Categoria', 'Ubicacion', 'Stock']
+                    : ['Fecha', 'Tipo', 'SKU', 'Producto', 'Ubicacion', 'Cambio', 'Saldo_anterior', 'Saldo_nuevo', 'Detalle'];
+            const body = previewRows.slice(0, 100).map(row => `<tr>${columns.map(column => `<td class="px-3 py-2 border-t border-bordercolor whitespace-nowrap">${row[column] ?? ''}</td>`).join('')}</tr>`).join('');
+            const emptyMessage = isPda || selectedSheet === 'movements' ? 'No hay movimientos en este periodo.' : 'No hay productos para esta hoja.';
+            const finalBody = body || `<tr><td colspan="${columns.length}" class="p-6 text-center text-slate-500">${emptyMessage}</td></tr>`;
+            const description = isPda ? 'Vista compacta para captura/importación en dispositivo PDA/TDA.' : `Vista previa de la hoja ${selectedSheet === 'inventory' ? 'Inventario' : 'Movimientos'} del archivo Excel.`;
+            target.innerHTML = `<p class="px-3 py-2 text-xs text-slate-500">${description} ${previewRows.length > 100 ? 'Se muestran los primeros 100 registros.' : ''}</p><table class="w-full text-left text-xs text-slate-300"><thead class="bg-slate-900/80 text-slate-400"><tr>${columns.map(column => `<th class="px-3 py-2">${column.replaceAll('_', ' ')}</th>`).join('')}</tr></thead><tbody>${finalBody}</tbody></table>`;
+        }
+
+        function downloadReportExport() {
+            const rows = getExportRows();
+            const date = new Date().toISOString().slice(0, 10);
+            if (document.getElementById('preview-format').value === 'pda') {
+                const compactRows = rows.movements.map(row => ({ Fecha: row.Fecha, SKU: row.SKU, Ubicacion: row.Ubicacion, Tipo: row.Tipo, Cambio: row.Cambio, Stock: row.Saldo_nuevo }));
+                downloadBlob(toCSV(compactRows, ['Fecha', 'SKU', 'Ubicacion', 'Tipo', 'Cambio', 'Stock']), `Movimientos_PDA_${date}.csv`, 'text/csv;charset=utf-8');
+                return;
+            }
+            if (!window.XLSX) {
+                showToast('No se pudo cargar el módulo de Excel. Comprueba tu conexión e inténtalo de nuevo.', 'error');
+                return;
+            }
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows.inventory), 'Inventario');
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows.movements), 'Movimientos');
+            XLSX.writeFile(workbook, `Informe_WMS_${date}.xlsx`);
+        }
+
+        function toCSV(rows, columns) {
+            const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+            return '\uFEFF' + [columns.map(quote).join(';'), ...rows.map(row => columns.map(column => quote(row[column])).join(';'))].join('\r\n');
+        }
+
+        function downloadBlob(content, filename, type) {
+            const url = URL.createObjectURL(new Blob([content], { type }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function renderReportChart(data) {
+            const ctx = document.getElementById('reportChart');
+            if (!ctx) return;
+            if (reportChartInstance) reportChartInstance.destroy();
+
+            reportChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(p => `${p.typeCode}-${p.nameCode}`),
+                    datasets: [{
+                        label: 'Unidades',
+                        data: data.map(p => p.quantity),
+                        backgroundColor: data.map(p => p.quantity <= 10 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(2, 132, 199, 0.7)'),
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
+
+        function printReport() { window.print(); }
+
+        function renderHistoryTable() {
+            const tbody = document.getElementById('history-table-body');
+            if (!tbody) return;
+
+            const activeLogs = historyLogs.filter(log => log.warehouseId === activeWarehouseId);
+            if (activeLogs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">Sin movimientos para este almacén.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = activeLogs.map(log => `
+                <tr class="hover:bg-slate-800/40 border-b border-bordercolor/40 text-xs">
+                    <td class="px-4 py-2 font-mono text-slate-400">${formatTimestamp(log.timestamp)}</td>
+                    <td class="px-4 py-2 font-bold">${log.type}</td>
+                    <td class="px-4 py-2 text-slate-200">${log.product}</td>
+                    <td class="px-4 py-2 font-mono text-slate-400">${log.location}</td>
+                    <td class="px-4 py-2 text-center font-mono font-bold">${log.change}</td>
+                    <td class="px-4 py-2 text-slate-400">${log.details}${log.stockBefore !== undefined ? `<span class="block text-[10px] text-slate-500">Saldo: ${log.stockBefore} → ${log.stockAfter}</span>` : ''}</td>
+                </tr>
+            `).join('');
+        }
+
+        function clearHistoryLog() {
+            if (confirm('¿Vaciar registro auditado?')) {
+                historyLogs = historyLogs.filter(log => log.warehouseId !== activeWarehouseId);
+                saveLogsToStorage();
+                renderHistoryTable();
+            }
+        }
+
+        function exportToCSV() {
+            let csv = 'Codigo_Tipo,Categoria,Abreviatura,Nombre_Producto,Fila,Estanteria,Stock\n';
+            getActiveProducts().forEach(p => {
+                csv += `${p.typeCode},"${(PRODUCT_TYPES[p.typeCode]||'').replace(/,/g,'')}",${p.nameCode},"${p.name.replace(/,/g,'')}",${p.row},${p.shelf},${p.quantity}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Inventario_WMS_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        function exportDataJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products, historyLogs, warehouses, activeWarehouseId }, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `Backup_WMS_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function resetDataConfirmation() {
+            if (confirm('¿Restablecer datos y layout por defecto a 10x10?')) {
+                configRows = 10;
+                configCols = 10;
+                cellTopology = {};
+                warehouses = [{ id: MAIN_WAREHOUSE_ID, name: 'Almacén Principal', location: '', rows: 10, cols: 10, topology: {} }];
+                activeWarehouseId = MAIN_WAREHOUSE_ID;
+                products = INITIAL_PRODUCTS.map(product => ({ ...product, warehouseId: MAIN_WAREHOUSE_ID }));
+                historyLogs = createSampleHistory(MAIN_WAREHOUSE_ID);
+                saveProductsToStorage();
+                saveLogsToStorage();
+                saveWarehousesToStorage();
+                persistActiveWarehouseLayout();
+                localStorage.setItem('wms_active_warehouse', activeWarehouseId);
+                populateFormDropdowns();
+                renderWarehouseGrid();
+                renderInventoryTable();
+                renderHistoryTable();
+                populateWarehouseSelector();
+                renderWarehouseOverview();
+                updateReportOptions();
+                generateReport();
+                showToast('Configuración restablecida.', 'info');
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgClass = "bg-slate-800 text-slate-100 border-bordercolor";
+            if (type === 'success') bgClass = "bg-emerald-900/90 text-emerald-100 border-emerald-700";
+            if (type === 'error') bgClass = "bg-red-900/90 text-red-100 border-red-700";
+
+            toast.className = `pointer-events-auto px-4 py-3 rounded-lg shadow-xl border text-xs font-medium transition-all transform duration-300 translate-y-2 ${bgClass}`;
+            toast.innerHTML = `<span>${message}</span>`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-4');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
